@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "inline_keys": {
+      "cwd": ".",
+      "command": "node",
+      "args": [
+        "--no-warnings",
+        "./mcp/server.mjs",
+        "--stdio"
+      ],
+      "env_vars": [
+        "INLINE_KEYS_ALLOWED_ROOTS",
+        "INLINE_KEYS_DEFAULT_TTL_SECONDS",
+        "INLINE_KEYS_MAX_SECRET_BYTES",
+        "INLINE_KEYS_TLS_CERT_FILE",
+        "INLINE_KEYS_TLS_KEY_FILE"
+      ],
+      "tool_timeout_sec": 15
+    }
+  }
+}

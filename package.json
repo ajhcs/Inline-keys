@@ -1,0 +1,23 @@
+{
+  "name": "inline-keys",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A value-blind localhost and private-LAN secret-entry plugin for Codex.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": [
+    ".codex-plugin",
+    ".mcp.json",
+    "LICENSE",
+    "README.md",
+    "mcp",
+    "skills",
+    "package.json"
+  ],
+  "scripts": {
+    "test": "node --no-warnings --test"
+  }
+}

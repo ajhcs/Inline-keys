@@ -1,0 +1,38 @@
+{
+  "name": "inline-keys",
+  "version": "0.1.0+codex.20260817002336",
+  "description": "Save API keys and passwords through a one-time localhost or private-LAN form without placing plaintext in Codex chat or MCP results.",
+  "author": {
+    "name": "Plumbob"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "credentials",
+    "secrets",
+    "localhost",
+    "lan",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Inline Keys",
+    "shortDescription": "Enter project credentials outside Codex chat",
+    "longDescription": "Inline Keys opens a one-time localhost or explicitly requested private-LAN form for API keys and passwords, writes the submitted value directly to an approved dotenv or raw file, and returns only value-blind status to Codex.",
+    "developerName": "Plumbob",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Securely add an API key to this project's .env.local file.",
+      "Open a private localhost form for a password and save it without putting it in chat.",
+      "Open an Inline Keys form over my private LAN so I can submit from another device.",
+      "Check whether my pending Inline Keys request was completed."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

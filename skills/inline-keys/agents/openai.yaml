@@ -1,0 +1,4 @@
+interface:
+  display_name: "Inline Keys"
+  short_description: "Save credentials through localhost or private LAN"
+  default_prompt: "Use $inline-keys to save an API key through localhost or my private LAN."
