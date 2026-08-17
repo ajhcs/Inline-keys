@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import {
@@ -48,6 +48,13 @@ function html(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function secureTokenEqual(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false;
+  const leftBytes = Buffer.from(left, 'utf8');
+  const rightBytes = Buffer.from(right, 'utf8');
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
 }
 
 function safePublicText(value, field, maximum = 240) {
@@ -317,6 +324,7 @@ function renderForm(request) {
     <p>${html(request.reason || 'Save this credential without placing it in Codex chat.')}</p>
     <div class="destination">${destination}</div>
     <form method="post" autocomplete="off">
+      <input name="form_token" type="hidden" value="${html(request.form_token)}">
       <label for="secret">Secret value</label>
       ${field}
       <label class="confirm"><input name="confirm" type="checkbox" value="yes" required><span>I approve writing this value to the exact destination shown above.</span></label>
@@ -564,9 +572,11 @@ export class InlineKeysService {
     const now = Date.now();
     const id = randomUUID();
     const browserToken = randomBytes(32).toString('base64url');
+    const formToken = randomBytes(32).toString('base64url');
     const request = {
       id,
       browser_token: browserToken,
+      form_token: formToken,
       label,
       reason,
       target_path: target,
@@ -585,6 +595,7 @@ export class InlineKeysService {
       if (request.status === 'pending') {
         request.status = 'expired';
         request.browser_token = undefined;
+        request.form_token = undefined;
         request.completed_at = new Date().toISOString();
         this.scheduleListenerCloseIfIdle(request.endpoint_key);
       }
@@ -609,6 +620,7 @@ export class InlineKeysService {
     if (request.status === 'pending') {
       request.status = 'cancelled';
       request.browser_token = undefined;
+      request.form_token = undefined;
       request.completed_at = new Date().toISOString();
       clearTimeout(request.timer);
       this.scheduleListenerCloseIfIdle(request.endpoint_key);
@@ -679,7 +691,8 @@ export class InlineKeysService {
         response.end();
         return;
       }
-      if (incoming.headers.origin !== endpoint.origin) {
+      const submittedOrigin = incoming.headers.origin;
+      if (submittedOrigin !== undefined && submittedOrigin !== 'null' && submittedOrigin !== endpoint.origin) {
         this.sendHtml(response, 403, renderResult('Request rejected', 'The form submission did not come from the expected Inline Keys page.'));
         return;
       }
@@ -692,6 +705,7 @@ export class InlineKeysService {
       if (request.status === 'pending' && Date.now() >= Date.parse(request.expires_at)) {
         request.status = 'expired';
         request.browser_token = undefined;
+        request.form_token = undefined;
         request.completed_at = new Date().toISOString();
         clearTimeout(request.timer);
         this.scheduleListenerCloseIfIdle(request.endpoint_key);
@@ -703,6 +717,10 @@ export class InlineKeysService {
         return;
       }
       const fields = new URLSearchParams(body);
+      if (!secureTokenEqual(fields.get('form_token'), request.form_token)) {
+        this.sendHtml(response, 403, renderResult('Request rejected', 'The form submission did not come from the expected Inline Keys page.'));
+        return;
+      }
       const secret = fields.get('secret');
       if (fields.get('confirm') !== 'yes' || typeof secret !== 'string' || secret.length === 0) {
         this.sendHtml(response, 400, renderResult('Nothing saved', 'Enter a value and confirm the exact destination.'));
@@ -728,6 +746,7 @@ export class InlineKeysService {
         });
         request.status = 'saved';
         request.browser_token = undefined;
+        request.form_token = undefined;
         request.operation = result.operation;
         request.error_code = undefined;
         request.completed_at = new Date().toISOString();
@@ -738,6 +757,7 @@ export class InlineKeysService {
         request.status = Date.now() >= Date.parse(request.expires_at) ? 'expired' : 'pending';
         if (request.status === 'expired') {
           request.browser_token = undefined;
+          request.form_token = undefined;
           request.completed_at = new Date().toISOString();
           this.scheduleListenerCloseIfIdle(request.endpoint_key);
         }

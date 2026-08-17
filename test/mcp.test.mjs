@@ -83,15 +83,18 @@ test('MCP transcript remains value-blind through form submission', async (contex
   });
   const metadata = created.result.structuredContent;
   assert.equal(metadata.status, 'pending');
+  const page = await fetch(metadata.open_url);
+  const pageBody = await page.text();
+  const formTokenMatch = /name="form_token" type="hidden" value="([A-Za-z0-9_-]{43})"/u.exec(pageBody);
+  assert.ok(formTokenMatch);
 
   const secret = 'mcp-transcript-sentinel-value';
   const submitted = await fetch(metadata.open_url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: new URL(metadata.open_url).origin,
     },
-    body: new URLSearchParams({ secret, confirm: 'yes' }),
+    body: new URLSearchParams({ form_token: formTokenMatch[1], secret, confirm: 'yes' }),
   });
   assert.equal(submitted.status, 200);
 
