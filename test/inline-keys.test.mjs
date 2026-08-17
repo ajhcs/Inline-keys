@@ -19,6 +19,12 @@ async function temporaryDirectory() {
   return mkdtemp(path.join(os.tmpdir(), 'inline-keys-test-'));
 }
 
+function extractFormToken(source) {
+  const match = /name="form_token" type="hidden" value="([A-Za-z0-9_-]{43})"/u.exec(source);
+  assert.ok(match, 'form contains a random anti-CSRF token');
+  return match[1];
+}
+
 const TEST_INTERFACES = {
   eth0: [{ address: '172.20.0.4', family: 'IPv4', internal: false }],
   wifi: [{ address: '192.168.50.9', family: 'IPv4', internal: false }],
@@ -133,15 +139,15 @@ test('localhost form saves a dotenv value without reflecting it', async (context
   const page = await fetch(request.open_url);
   assert.equal(page.status, 200);
   assert.equal(page.headers.get('cache-control'), 'no-store, max-age=0');
+  const formToken = extractFormToken(await page.text());
 
   const secret = 'test-value-not-for-output';
   const submitted = await fetch(request.open_url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: new URL(request.open_url).origin,
     },
-    body: new URLSearchParams({ secret, confirm: 'yes' }),
+    body: new URLSearchParams({ form_token: formToken, secret, confirm: 'yes' }),
   });
   const responseBody = await submitted.text();
   assert.equal(submitted.status, 200);
@@ -160,7 +166,7 @@ test('localhost form saves a dotenv value without reflecting it', async (context
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: new URL(request.open_url).origin,
     },
-    body: new URLSearchParams({ secret: 'second-value', confirm: 'yes' }),
+    body: new URLSearchParams({ form_token: formToken, secret: 'second-value', confirm: 'yes' }),
   });
   assert.equal(replay.status, 404);
   assert.equal(await readFile(target, 'utf8'), `SERVICE_API_KEY=${secret}\n`);
@@ -177,13 +183,14 @@ test('raw mode refuses replacement unless it was explicitly requested', async (c
     target_path: target,
     format: 'raw',
   });
+  const formToken = extractFormToken(await (await fetch(request.open_url)).text());
   const submitted = await fetch(request.open_url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: new URL(request.open_url).origin,
     },
-    body: new URLSearchParams({ secret: 'replacement', confirm: 'yes' }),
+    body: new URLSearchParams({ form_token: formToken, secret: 'replacement', confirm: 'yes' }),
   });
   assert.equal(submitted.status, 400);
   assert.equal(service.getRequest(request.request_id).error_code, 'replace_not_approved');
@@ -201,16 +208,38 @@ test('form rejects a mismatched origin', async (context) => {
     format: 'dotenv',
     env_var: 'DATABASE_PASSWORD',
   });
+  const formToken = extractFormToken(await (await fetch(request.open_url)).text());
   const submitted = await fetch(request.open_url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Origin: 'http://example.invalid',
     },
-    body: new URLSearchParams({ secret: 'not-written', confirm: 'yes' }),
+    body: new URLSearchParams({ form_token: formToken, secret: 'not-written', confirm: 'yes' }),
   });
   assert.equal(submitted.status, 403);
   assert.equal(service.getRequest(request.request_id).status, 'pending');
+});
+
+test('form rejects a missing or invalid page token when Origin is unavailable', async (context) => {
+  const root = await temporaryDirectory();
+  const target = path.join(root, '.env');
+  const service = new InlineKeysService({ allowedRoots: [root], defaultTtlSeconds: 60 });
+  context.after(() => service.close());
+  const request = await service.createRequest({
+    label: 'Protected API key',
+    target_path: target,
+    format: 'dotenv',
+    env_var: 'PROTECTED_API_KEY',
+  });
+  const submitted = await fetch(request.open_url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ form_token: 'invalid', secret: 'not-written', confirm: 'yes' }),
+  });
+  assert.equal(submitted.status, 403);
+  assert.equal(service.getRequest(request.request_id).status, 'pending');
+  await assert.rejects(readFile(target, 'utf8'), (error) => error?.code === 'ENOENT');
 });
 
 test('cancelling an in-flight POST prevents a delayed secret write', async (context) => {
@@ -232,6 +261,7 @@ test('cancelling an in-flight POST prevents a delayed secret write', async (cont
     format: 'dotenv',
     env_var: 'DELAYED_SECRET',
   });
+  const formToken = extractFormToken(await (await fetch(request.open_url)).text());
   let outgoing;
   const responsePromise = new Promise((resolve, reject) => {
     outgoing = httpRequest(request.open_url, {
@@ -245,7 +275,7 @@ test('cancelling an in-flight POST prevents a delayed secret write', async (cont
       response.once('end', () => resolve(response.statusCode));
     });
     outgoing.once('error', reject);
-    outgoing.write('secret=delayed-sentinel');
+    outgoing.write(`form_token=${encodeURIComponent(formToken)}&secret=delayed-sentinel`);
   });
   await bodyStarted;
   service.cancelRequest(request.request_id);
@@ -319,16 +349,18 @@ test('private-LAN form binds an assigned interface and writes without reflection
   assert.equal(request.transport_security, 'private_lan_http');
   const page = await fetch(request.open_url);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /unencrypted HTTP/u);
+  const pageBody = await page.text();
+  assert.match(pageBody, /unencrypted HTTP/u);
+  const formToken = extractFormToken(pageBody);
 
   const secret = 'lan-sentinel-not-for-output';
   const unconfirmed = await fetch(request.open_url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: new URL(request.open_url).origin,
+      Origin: 'null',
     },
-    body: new URLSearchParams({ secret, confirm: 'yes' }),
+    body: new URLSearchParams({ form_token: formToken, secret, confirm: 'yes' }),
   });
   assert.equal(unconfirmed.status, 400);
   assert.equal(service.getRequest(request.request_id).status, 'pending');
@@ -337,9 +369,8 @@ test('private-LAN form binds an assigned interface and writes without reflection
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: new URL(request.open_url).origin,
     },
-    body: new URLSearchParams({ secret, confirm: 'yes', confirm_insecure_lan: 'yes' }),
+    body: new URLSearchParams({ form_token: formToken, secret, confirm: 'yes', confirm_insecure_lan: 'yes' }),
   });
   assert.equal(submitted.status, 200);
   assert.equal((await submitted.text()).includes(secret), false);

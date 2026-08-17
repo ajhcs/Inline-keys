@@ -7,7 +7,7 @@ Inline Keys is a Codex plugin for collecting a user-supplied credential without 
 - Localhost mode binds only to `127.0.0.1` on an ephemeral port.
 - LAN mode binds only to a private IPv4 address assigned to the host. It does not bind `0.0.0.0`, public addresses, or arbitrary hostnames.
 - Every form URL contains a random, one-time capability and expires after a short TTL.
-- POST requests require the exact origin and an explicit destination confirmation checkbox. LAN requests reject clients without a private IPv4 source address.
+- Every rendered form contains a separate random anti-CSRF token that is never returned through MCP. Explicitly mismatched origins are rejected, while browsers that omit the `Origin` header or send `null` can submit with the valid page token. The form also requires an explicit destination confirmation checkbox, and LAN requests reject clients without a private IPv4 source address.
 - Responses disable caching, framing, referrers, and unrelated browser capabilities.
 - Secret values are never logged or returned through MCP.
 - Writes reject symlink targets, resolve the parent directory before writing, use an atomic same-directory replacement, and set owner-only permissions where supported.

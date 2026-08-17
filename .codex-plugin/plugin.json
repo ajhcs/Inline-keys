@@ -1,6 +1,6 @@
 {
   "name": "inline-keys",
-  "version": "0.1.0+codex.20260817002336",
+  "version": "0.1.0+codex.20260817003513",
   "description": "Save API keys and passwords through a one-time localhost or private-LAN form without placing plaintext in Codex chat or MCP results.",
   "author": {
     "name": "Plumbob"
